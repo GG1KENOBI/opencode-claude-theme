@@ -271,10 +271,54 @@ const treeCss = String.raw`
 }
 
 [data-claude-tree] .ct-session-title {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+[data-claude-tree] .ct-session-model {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 96px;
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--v2-text-text-faint);
+}
+
+[data-claude-tree] .ct-session-dot {
+  display: none;
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--v2-text-text-accent);
+  animation: ct-pulse 1.2s ease-in-out infinite;
+}
+
+[data-claude-tree] .ct-session[data-running="1"] .ct-session-dot {
+  display: inline-block;
+}
+
+@keyframes ct-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-claude-tree] .ct-session-dot {
+    animation: none;
+  }
 }
 
 [data-claude-tree] .ct-empty {
@@ -461,6 +505,7 @@ function setupProjectTree(ctx) {
     server: "",
     busy: false,
     loaded: false,
+    running: new Set(),
   }
 
   const root = document.createElement("div")
@@ -586,6 +631,17 @@ function setupProjectTree(ctx) {
       if (session.time && session.time.archived) return false
       return true
     })
+  }
+
+  async function refreshRunning() {
+    try {
+      const res = await ctx.client.session.active()
+      const map = res?.data ?? res ?? {}
+      store.running = new Set(Object.keys(map).filter((id) => id.startsWith("ses")))
+      syncActive()
+    } catch {
+      /* keep the last known state until the server answers again */
+    }
   }
 
   async function refresh() {
@@ -877,7 +933,11 @@ function setupProjectTree(ctx) {
     seedCollapse(items)
 
     const signature = JSON.stringify(
-      items.map((item) => [item.id, item.name, item.sessions.map((s) => [s.id, s.title, s.time?.updated])]),
+      items.map((item) => [
+        item.id,
+        item.name,
+        item.sessions.map((s) => [s.id, s.title, s.time?.updated, s.model?.id]),
+      ]),
     )
     if (signature === store.sig) {
       syncActive()
@@ -949,11 +1009,22 @@ function setupProjectTree(ctx) {
           type: "button",
           "data-session": session.id,
           "data-active": session.id === current ? "1" : "0",
+          "data-running": store.running.has(session.id) ? "1" : "0",
           title: session.title || "",
         })
         button.appendChild(
           el("span", { class: "ct-session-title", text: session.title || strings.untitled }),
         )
+        button.appendChild(el("span", { class: "ct-session-dot", title: strings.running }))
+        if (session.model?.id) {
+          button.appendChild(
+            el("span", {
+              class: "ct-session-model",
+              text: session.model.id,
+              title: [session.model.providerID, session.model.id].filter(Boolean).join("/"),
+            }),
+          )
+        }
         list.appendChild(button)
       }
       project.appendChild(list)
@@ -968,7 +1039,9 @@ function setupProjectTree(ctx) {
   function syncActive() {
     const current = currentId()
     for (const node of root.querySelectorAll("[data-session]")) {
-      node.setAttribute("data-active", node.getAttribute("data-session") === current ? "1" : "0")
+      const id = node.getAttribute("data-session")
+      node.setAttribute("data-active", id === current ? "1" : "0")
+      node.setAttribute("data-running", store.running.has(id) ? "1" : "0")
     }
     if (!current || current === activeId) return
     activeId = current
@@ -1109,7 +1182,12 @@ function setupProjectTree(ctx) {
     renderUsage()
     refresh()
     refreshUsage()
+    refreshRunning()
     mountTimer = setInterval(mount, 1200)
+    const runningTimer = setInterval(() => {
+      if (!document.hidden) refreshRunning()
+    }, 3000)
+    window.__claudeTreeTimers.push(runningTimer)
     refreshTimer = setInterval(() => {
       if (!document.hidden) refresh()
     }, 8000)
@@ -1151,6 +1229,7 @@ function localeStrings(ctx) {
       newSession: "Новая сессия в этом проекте",
       collapseAll: "Свернуть все проекты",
       expandAll: "Развернуть все проекты",
+      running: "Агент работает",
       limits: "Лимиты",
       go: "OpenCode Go",
       rolling: "5 часов",
@@ -1179,6 +1258,7 @@ function localeStrings(ctx) {
     newSession: "New session in this project",
     collapseAll: "Collapse all projects",
     expandAll: "Expand all projects",
+    running: "Agent is running",
     limits: "Limits",
     go: "OpenCode Go",
     rolling: "5 hours",
