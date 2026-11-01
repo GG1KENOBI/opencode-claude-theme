@@ -3,7 +3,8 @@
 // OpenCode paints its palette from a generated theme stylesheet that is injected
 // after plugin styles, and it also sets the root background inline. Both are
 // outranked here with `!important` on a higher specificity selector.
-const { Plugin, Style } = require("@opencode/plugin/gui")
+const { Plugin, Style, TitlebarItem } = require("@opencode/plugin/gui")
+const { createSignal } = require("solid-js")
 
 const css = String.raw`
 /* ---------- Claude Code palette: warm charcoal + Claude orange ---------- */
@@ -153,7 +154,12 @@ const treeCss = String.raw`
   font: inherit;
   text-align: left;
   cursor: default;
-  outline: none;
+}
+
+[data-claude-tree] .ct-proj-row:focus-visible,
+[data-claude-tree] .ct-session:focus-visible {
+  outline: 1px solid var(--v2-icon-icon-accent);
+  outline-offset: -1px;
 }
 
 [data-claude-tree] .ct-proj-row:hover {
@@ -257,7 +263,6 @@ const treeCss = String.raw`
   font: inherit;
   text-align: left;
   cursor: default;
-  outline: none;
 }
 
 [data-claude-tree] .ct-session:hover {
@@ -305,6 +310,17 @@ const treeCss = String.raw`
   display: inline-block;
 }
 
+[data-claude-tree] .ct-session[data-unread="1"] .ct-session-dot {
+  display: inline-block;
+  animation: none;
+  background: var(--v2-text-text-base);
+}
+
+[data-claude-tree] .ct-session[data-unread="1"] .ct-session-title {
+  font-weight: 600;
+  color: var(--v2-text-text-base);
+}
+
 @keyframes ct-pulse {
   0%,
   100% {
@@ -327,35 +343,47 @@ const treeCss = String.raw`
   color: var(--v2-text-text-faint);
 }
 
-/* ---------- Usage limits pinned to the bottom of the sidebar ---------- */
-[data-claude-tree] .ct-usage {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  margin: auto -8px 0;
-  padding: 9px 14px 11px;
+/* ---------- Titlebar pills (cost, usage) sit side by side in the sidebar footer ---------- */
+[data-slot="vertical-tabs-footer"] {
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- Usage panel: a table opened from the usage pill ---------- */
+[data-claude-usage-panel] {
+  position: fixed;
+  top: auto !important;
+  height: auto !important;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  z-index: 1000;
+  box-sizing: border-box;
+  width: 280px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
   background: var(--v2-background-bg-deep, #1f1e1d);
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: 0 -10px 20px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  color: var(--v2-text-text-base);
+  font-size: 12px;
   line-height: 1.3;
 }
 
-[data-claude-tree] .ct-usage-head {
+[data-claude-usage-panel][hidden] {
+  display: none;
+}
+
+[data-claude-usage-panel] .ct-usage-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding-bottom: 5px;
+  padding-bottom: 8px;
 }
 
-[data-claude-tree] .ct-usage-right {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  min-width: 0;
-}
-
-[data-claude-tree] .ct-usage-title {
+[data-claude-usage-panel] .ct-usage-title {
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.07em;
@@ -363,36 +391,37 @@ const treeCss = String.raw`
   color: var(--v2-text-text-faint);
 }
 
-[data-claude-tree] .ct-usage-plan {
-  font-size: 10px;
-  color: var(--v2-text-text-faint);
-  opacity: 0.8;
+[data-claude-usage-panel] .ct-usage-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
-[data-claude-tree] .ct-usage-refresh {
-  display: none;
+[data-claude-usage-panel] .ct-usage-plan {
+  font-size: 10px;
+  color: var(--v2-text-text-faint);
+}
+
+[data-claude-usage-panel] .ct-usage-refresh {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: 0;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
   color: var(--v2-text-text-faint);
   cursor: default;
 }
 
-[data-claude-tree] .ct-usage:hover .ct-usage-refresh {
-  display: inline-flex;
-}
-
-[data-claude-tree] .ct-usage-refresh:hover {
+[data-claude-usage-panel] .ct-usage-refresh:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--v2-text-text-base);
 }
 
-[data-claude-tree] .ct-usage-refresh svg {
+[data-claude-usage-panel] .ct-usage-refresh svg {
   width: 11px;
   height: 11px;
   fill: none;
@@ -402,74 +431,63 @@ const treeCss = String.raw`
   stroke-linejoin: round;
 }
 
-[data-claude-tree] .ct-meter {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 4px 0 3px;
-}
-
-[data-claude-tree] .ct-meter-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-[data-claude-tree] .ct-meter-label {
-  flex: 0 0 auto;
-  font-size: 11.5px;
-  color: var(--v2-text-text-muted);
-}
-
-[data-claude-tree] .ct-meter-meta {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10.5px;
-  color: var(--v2-text-text-faint);
+[data-claude-usage-panel] table {
+  width: 100%;
+  border-collapse: collapse;
   font-variant-numeric: tabular-nums;
 }
 
-[data-claude-tree] .ct-meter-left {
+[data-claude-usage-panel] th {
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  color: var(--v2-text-text-faint);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+[data-claude-usage-panel] th.ct-usage-num {
+  text-align: right;
+}
+
+[data-claude-usage-panel] td {
+  padding: 7px 6px;
+  color: var(--v2-text-text-muted);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  white-space: nowrap;
+}
+
+[data-claude-usage-panel] tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+[data-claude-usage-panel] td.ct-usage-num {
+  text-align: right;
+  font-weight: 600;
   color: var(--v2-text-text-base);
 }
 
-[data-claude-tree] .ct-meter-track {
-  height: 3px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.09);
-  overflow: hidden;
+[data-claude-usage-panel] tr[data-level="warn"] td.ct-usage-num {
+  color: #d9a05b;
 }
 
-[data-claude-tree] .ct-meter-fill {
-  height: 100%;
-  border-radius: 2px;
-  background: var(--v2-blue-500);
-  transition: width 300ms ease;
-}
-
-[data-claude-tree] .ct-meter[data-level="warn"] .ct-meter-fill {
-  background: #d9a05b;
-}
-
-[data-claude-tree] .ct-meter[data-level="high"] .ct-meter-fill {
-  background: #dd6656;
-}
-
-[data-claude-tree] .ct-meter[data-limited="1"] .ct-meter-label,
-[data-claude-tree] .ct-meter[data-limited="1"] .ct-meter-meta {
+[data-claude-usage-panel] tr[data-level="high"] td.ct-usage-num {
   color: #dd6656;
 }
 
-[data-claude-tree] .ct-usage-note {
-  padding: 2px 0 1px;
-  font-size: 10.5px;
+[data-claude-usage-panel] tr[data-limited="1"] td {
+  color: #dd6656;
+}
+
+[data-claude-usage-panel] .ct-usage-note {
+  padding: 4px 0 2px;
+  font-size: 11px;
   color: var(--v2-text-text-faint);
 }
 
-[data-claude-tree] .ct-usage-retry {
+[data-claude-usage-panel] .ct-usage-retry {
   padding: 0;
   border: 0;
   background: transparent;
@@ -478,12 +496,14 @@ const treeCss = String.raw`
   cursor: default;
 }
 
-[data-claude-tree] .ct-usage-retry:hover {
+[data-claude-usage-panel] .ct-usage-retry:hover {
   text-decoration: underline;
 }
+
 `
 
 const COLLAPSE_KEY = "claude-tree-collapsed-v2"
+const SORT_KEY = "claude-tree-sort"
 
 function setupProjectTree(ctx) {
   if (typeof document === "undefined") return
@@ -492,7 +512,7 @@ function setupProjectTree(ctx) {
   const previousTimers = window.__claudeTreeTimers
   if (Array.isArray(previousTimers)) for (const id of previousTimers) clearInterval(id)
   window.__claudeTreeTimers = []
-  for (const node of document.querySelectorAll("[data-claude-tree]")) node.remove()
+  for (const node of document.querySelectorAll("[data-claude-tree], [data-claude-usage-panel]")) node.remove()
 
   const strings = localeStrings(ctx)
 
@@ -506,14 +526,16 @@ function setupProjectTree(ctx) {
     busy: false,
     loaded: false,
     running: new Set(),
+    sort: readSort(),
   }
 
   const root = document.createElement("div")
   root.setAttribute("data-claude-tree", "")
 
-  const usageRoot = document.createElement("div")
-  usageRoot.setAttribute("data-claude-usage", "")
-  usageRoot.className = "ct-usage"
+  const panel = el("div", {
+    "data-claude-usage-panel": "",
+    hidden: "",
+  })
 
   const usage = {
     busy: false,
@@ -543,6 +565,20 @@ function setupProjectTree(ctx) {
   function saveCollapsed() {
     try {
       localStorage.setItem(COLLAPSE_KEY, JSON.stringify(store.collapsed))
+    } catch {}
+  }
+
+  function readSort() {
+    try {
+      return localStorage.getItem(SORT_KEY) === "name" ? "name" : "activity"
+    } catch {
+      return "activity"
+    }
+  }
+
+  function saveSort() {
+    try {
+      localStorage.setItem(SORT_KEY, store.sort)
     } catch {}
   }
 
@@ -588,6 +624,13 @@ function setupProjectTree(ctx) {
     } catch {
       return ""
     }
+  }
+
+  function isUnread(session, current) {
+    if (!session || session.id === current || store.running.has(session.id)) return false
+    const time = session.time
+    if (time?.idle === undefined || time?.idle === null) return false
+    return time.viewed === undefined || time.viewed === null || time.idle > time.viewed
   }
 
   function cssEscape(value) {
@@ -696,11 +739,16 @@ function setupProjectTree(ctx) {
       })
     }
 
-    list.sort((a, b) => {
-      const at = a.sessions[0]?.time?.updated || a.active
-      const bt = b.sessions[0]?.time?.updated || b.active
-      return bt - at
-    })
+    if (store.sort === "name") {
+      const locale = dateLocale()
+      list.sort((a, b) => a.name.localeCompare(b.name, locale, { sensitivity: "base", numeric: true }))
+    } else {
+      list.sort((a, b) => {
+        const at = a.sessions[0]?.time?.updated || a.active
+        const bt = b.sessions[0]?.time?.updated || b.active
+        return bt - at
+      })
+    }
     return list
   }
 
@@ -758,6 +806,54 @@ function setupProjectTree(ctx) {
     })
   }
 
+  function usageShortLabel(key) {
+    return { rolling: strings.rollingShort, weekly: strings.weeklyShort, monthly: strings.monthlyShort }[key]
+  }
+
+  function usageItem() {
+    if (!usage.loaded) return undefined
+    const pressed = !panel.hidden
+    if (!usage.meters.length) {
+      if (!usage.failed) return undefined
+      return {
+        id: "claude-limits",
+        label: strings.usageShort,
+        title: strings.usageError,
+        icon: "circle-exclamation",
+        pressed,
+        run: togglePanel,
+      }
+    }
+    const worst = usage.meters.reduce((a, b) => (b.percent > a.percent ? b : a))
+    const low = usage.meters.some((meter) => meter.percent >= 90 || meter.limited)
+    return {
+      id: "claude-limits",
+      label: usageShortLabel(worst.key) + " " + Math.max(0, Math.round(100 - worst.percent)) + "%",
+      title: strings.limits + " · " + strings.go,
+      icon: low ? "circle-exclamation" : "status",
+      pressed,
+      run: togglePanel,
+    }
+  }
+
+  function usageHead() {
+    const right = el("span", { class: "ct-usage-right" })
+    right.appendChild(el("span", { class: "ct-usage-plan", text: strings.go }))
+    const refresh = el("button", {
+      class: "ct-usage-refresh",
+      type: "button",
+      "data-usage-refresh": "",
+      title: strings.refreshUsage,
+    })
+    refresh.innerHTML =
+      '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M10 4.3A4.2 4.2 0 1 0 10.2 7"/><path d="M10 1.9v2.7H7.3"/></svg>'
+    right.appendChild(refresh)
+    return el("div", { class: "ct-usage-head" }, [
+      el("span", { class: "ct-usage-title", text: strings.limits }),
+      right,
+    ])
+  }
+
   function resetTitle(resetsAt) {
     if (!resetsAt) return ""
     return new Date(resetsAt).toLocaleString(dateLocale(), {
@@ -768,108 +864,123 @@ function setupProjectTree(ctx) {
     })
   }
 
-  function usageHead(withRefresh) {
-    const right = el("span", { class: "ct-usage-right" })
-    right.appendChild(el("span", { class: "ct-usage-plan", text: strings.go }))
-    if (withRefresh) {
-      const refresh = el("button", {
-        class: "ct-usage-refresh",
-        type: "button",
-        "data-usage-refresh": "",
-        title: strings.refreshUsage,
-      })
-      refresh.innerHTML =
-        '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M10 4.3A4.2 4.2 0 1 0 10.2 7"/><path d="M10 1.9v2.7H7.3"/></svg>'
-      right.appendChild(refresh)
+  function usageTable() {
+    const body = el("tbody", {})
+    for (const meter of usage.meters) {
+      const remaining = Math.max(0, Math.round(100 - meter.percent))
+      const reset = resetText(meter.resetsAt)
+      const resetCell = meter.limited ? [strings.limited, reset].filter(Boolean).join(" · ") : reset || "—"
+      body.appendChild(
+        el(
+          "tr",
+          {
+            "data-level": meterLevel(meter.percent),
+            "data-limited": meter.limited ? "1" : "0",
+            title: resetTitle(meter.resetsAt),
+          },
+          [
+            el("td", { text: meter.label }),
+            el("td", { class: "ct-usage-num", text: remaining + "%" }),
+            el("td", { text: resetCell }),
+          ],
+        ),
+      )
     }
-    return el("div", { class: "ct-usage-head" }, [
-      el("span", { class: "ct-usage-title", text: strings.limits }),
-      right,
+    return el("table", {}, [
+      el("thead", {}, [
+        el("tr", {}, [
+          el("th", { text: strings.windowHeader }),
+          el("th", { class: "ct-usage-num", text: strings.leftHeader }),
+          el("th", { text: strings.resetHeader }),
+        ]),
+      ]),
+      body,
     ])
   }
 
   function renderUsage() {
-    usageRoot.replaceChildren()
-    usageRoot.style.display = ""
-
     if (!usage.loaded) {
-      usageRoot.appendChild(usageHead(false))
-      usageRoot.appendChild(el("div", { class: "ct-usage-note", text: strings.loading }))
-      return
-    }
-
-    if (!usage.meters.length) {
-      if (usage.failed) {
-        usageRoot.appendChild(usageHead(true))
+      panel.replaceChildren(usageHead(), el("div", { class: "ct-usage-note", text: strings.loading }))
+    } else if (!usage.meters.length) {
+      if (!usage.failed) {
+        closePanel()
+      } else {
         const note = el("div", { class: "ct-usage-note" })
         note.appendChild(document.createTextNode(strings.usageError + " · "))
-        const retry = el("button", {
-          class: "ct-usage-retry",
-          type: "button",
-          "data-usage-retry": "",
-        })
+        const retry = el("button", { class: "ct-usage-retry", type: "button", "data-usage-retry": "" })
         retry.textContent = strings.retry
         note.appendChild(retry)
-        usageRoot.appendChild(note)
-        return
+        panel.replaceChildren(usageHead(), note)
       }
-      usageRoot.style.display = "none"
-      return
+    } else {
+      panel.replaceChildren(usageHead(), usageTable())
     }
+    publishPill()
+  }
 
-    usageRoot.appendChild(usageHead(true))
+  function placePanel(anchor) {
+    const rect = anchor ? anchor.getBoundingClientRect() : null
+    const width = panel.offsetWidth || 280
+    const left = rect ? Math.min(Math.max(8, rect.left), window.innerWidth - width - 8) : 12
+    panel.style.left = left + "px"
+    panel.style.bottom = (rect ? window.innerHeight - rect.top + 6 : 44) + "px"
+  }
 
-    if (!usage.announced) {
+  function openPanel() {
+    const active = document.activeElement
+    panelAnchor = active instanceof HTMLButtonElement ? active : null
+    panel.hidden = false
+    placePanel(panelAnchor)
+    publishPill()
+  }
+
+  function closePanel() {
+    if (panel.hidden) return
+    panel.hidden = true
+    panelAnchor = null
+    publishPill()
+  }
+
+  function togglePanel() {
+    if (panel.hidden) openPanel()
+    else closePanel()
+  }
+
+  let panelAnchor = null
+  if (window.__claudeUsageDismiss) {
+    document.removeEventListener("pointerdown", window.__claudeUsageDismiss, true)
+    document.removeEventListener("keydown", window.__claudeUsageEscape, true)
+  }
+  window.__claudeUsageDismiss = (event) => {
+    if (panel.hidden) return
+    const target = event.target instanceof Element ? event.target : null
+    if (target && (panel.contains(target) || (panelAnchor && panelAnchor.contains(target)))) return
+    closePanel()
+  }
+  window.__claudeUsageEscape = (event) => {
+    if (event.key === "Escape") closePanel()
+  }
+  document.addEventListener("pointerdown", window.__claudeUsageDismiss, true)
+  document.addEventListener("keydown", window.__claudeUsageEscape, true)
+
+  function retryUsage() {
+    usage.attempts = 0
+    refreshUsage()
+  }
+
+  function publishPill() {
+    if (usage.meters.length && !usage.announced) {
       usage.announced = true
       console.info(
         "[claude-theme] usage limits mounted: " +
           usage.meters.map((meter) => meter.key + " " + Math.round(meter.percent) + "%").join(", "),
       )
     }
-
-    for (const meter of usage.meters) {
-      const remaining = Math.max(0, Math.round(100 - meter.percent))
-      const row = el("div", {
-        class: "ct-meter",
-        "data-level": meterLevel(meter.percent),
-        "data-limited": meter.limited ? "1" : "0",
-      })
-      row.title = [
-        strings.used.replace("{percent}", String(Math.round(meter.percent))),
-        resetTitle(meter.resetsAt) ? strings.resetLong.replace("{time}", resetTitle(meter.resetsAt)) : "",
-      ]
-        .filter(Boolean)
-        .join(" · ")
-
-      const top = el("div", { class: "ct-meter-top" })
-      top.appendChild(el("span", { class: "ct-meter-label", text: meter.label }))
-      const meta = el("span", { class: "ct-meter-meta" })
-      if (meter.limited) {
-        meta.appendChild(el("span", { class: "ct-meter-left", text: strings.limited }))
-        const reset = resetText(meter.resetsAt)
-        if (reset) meta.appendChild(document.createTextNode(" · " + reset))
-      } else {
-        meta.appendChild(
-          el("span", { class: "ct-meter-left", text: strings.left.replace("{percent}", String(remaining)) }),
-        )
-        const reset = resetText(meter.resetsAt)
-        if (reset) {
-          meta.appendChild(
-            document.createTextNode(" · " + strings.resetShort + " " + reset),
-          )
-        }
-      }
-      top.appendChild(meta)
-      row.appendChild(top)
-
-      const track = el("div", { class: "ct-meter-track" })
-      const fill = el("div", { class: "ct-meter-fill" })
-      fill.style.width = Math.max(0, Math.min(100, meter.percent)) + "%"
-      track.appendChild(fill)
-      row.appendChild(track)
-      usageRoot.appendChild(row)
-    }
+    setPill(usageItem())
   }
+
+  const [pillItem, setPill] = createSignal(undefined)
+  ctx.add(TitlebarItem, () => pillItem())
 
   async function refreshUsage() {
     if (usage.busy) return
@@ -897,13 +1008,12 @@ function setupProjectTree(ctx) {
     }
   }
 
-  usageRoot.addEventListener("click", (event) => {
+  panel.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null
     if (!target) return
     if (!target.closest("[data-usage-refresh]") && !target.closest("[data-usage-retry]")) return
     event.preventDefault()
-    usage.attempts = 0
-    refreshUsage()
+    retryUsage()
   })
 
   /* ---------- rendering ---------- */
@@ -946,6 +1056,18 @@ function setupProjectTree(ctx) {
     store.sig = signature
 
     const fragment = document.createDocumentFragment()
+    const byName = store.sort === "name"
+    const sortBtn = el("button", {
+      class: "ct-head-btn",
+      type: "button",
+      "data-sort-toggle": "",
+      title: byName ? strings.sortName : strings.sortActivity,
+      "aria-label": byName ? strings.sortName : strings.sortActivity,
+    })
+    sortBtn.innerHTML = byName
+      ? '<svg viewBox="0 0 12 12" aria-hidden="true"><text x="6" y="8.4" font-size="6" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">A-Z</text></svg>'
+      : '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.3"/><path d="M6 3.7V6l1.6 1"/></svg>'
+
     const anyOpen = items.some((item) => store.collapsed[item.id] !== true)
     const toggleAll = el("button", {
       class: "ct-head-btn",
@@ -960,6 +1082,7 @@ function setupProjectTree(ctx) {
       el("div", { class: "ct-head" }, [
         el("span", { text: strings.projects }),
         el("span", { class: "ct-head-end" }, [
+          sortBtn,
           el("span", { class: "ct-count", text: String(items.length) }),
           toggleAll,
         ]),
@@ -1010,12 +1133,13 @@ function setupProjectTree(ctx) {
           "data-session": session.id,
           "data-active": session.id === current ? "1" : "0",
           "data-running": store.running.has(session.id) ? "1" : "0",
+          "data-unread": isUnread(session, current) ? "1" : "0",
           title: session.title || "",
         })
         button.appendChild(
           el("span", { class: "ct-session-title", text: session.title || strings.untitled }),
         )
-        button.appendChild(el("span", { class: "ct-session-dot", title: strings.running }))
+        button.appendChild(el("span", { class: "ct-session-dot" }))
         if (session.model?.id) {
           button.appendChild(
             el("span", {
@@ -1032,16 +1156,20 @@ function setupProjectTree(ctx) {
     }
 
     root.replaceChildren(fragment)
-    root.appendChild(usageRoot)
     syncActive()
   }
 
   function syncActive() {
     const current = currentId()
+    const byId = new Map(store.sessions.map((session) => [session.id, session]))
     for (const node of root.querySelectorAll("[data-session]")) {
       const id = node.getAttribute("data-session")
+      const running = store.running.has(id)
       node.setAttribute("data-active", id === current ? "1" : "0")
-      node.setAttribute("data-running", store.running.has(id) ? "1" : "0")
+      node.setAttribute("data-running", running ? "1" : "0")
+      node.setAttribute("data-unread", isUnread(byId.get(id), current) ? "1" : "0")
+      const dot = node.querySelector(".ct-session-dot")
+      if (dot) dot.setAttribute("title", running ? strings.running : strings.unread)
     }
     if (!current || current === activeId) return
     activeId = current
@@ -1081,6 +1209,13 @@ function setupProjectTree(ctx) {
     if (node) node.setAttribute("data-open", collapsed ? "0" : "1")
   }
 
+  function toggleSort() {
+    store.sort = store.sort === "name" ? "activity" : "name"
+    saveSort()
+    store.sig = ""
+    render()
+  }
+
   function toggleAll() {
     const nodes = root.querySelectorAll("[data-project]")
     const anyOpen = Array.from(nodes).some((node) => node.getAttribute("data-open") === "1")
@@ -1103,6 +1238,12 @@ function setupProjectTree(ctx) {
   root.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null
     if (!target) return
+
+    if (target.closest("[data-sort-toggle]")) {
+      event.preventDefault()
+      toggleSort()
+      return
+    }
 
     if (target.closest("[data-toggle-all]")) {
       event.preventDefault()
@@ -1132,7 +1273,32 @@ function setupProjectTree(ctx) {
     }
   })
 
+  function navItems() {
+    return Array.from(root.querySelectorAll(".ct-proj-row, .ct-session")).filter(
+      (node) => node.getClientRects().length > 0,
+    )
+  }
+
   root.addEventListener("keydown", (event) => {
+    const source = event.target instanceof Element ? event.target : null
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const items = navItems()
+      const index = items.indexOf(source?.closest(".ct-proj-row, .ct-session"))
+      if (index === -1) return
+      event.preventDefault()
+      const step = event.key === "ArrowDown" ? 1 : -1
+      items[Math.max(0, Math.min(items.length - 1, index + step))].focus()
+      return
+    }
+    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      const project = source?.closest("[data-project]")
+      if (!project || !source.closest(".ct-proj-row")) return
+      const open = project.getAttribute("data-open") === "1"
+      if (open === (event.key === "ArrowRight")) return
+      event.preventDefault()
+      toggle(project.getAttribute("data-project"))
+      return
+    }
     if (event.key !== "Enter" && event.key !== " ") return
     const target = event.target instanceof Element ? event.target : null
     if (!target || target.closest(".ct-new")) return
@@ -1156,7 +1322,6 @@ function setupProjectTree(ctx) {
       const list = scroll.querySelector(":scope > [data-titlebar-tab-list]")
       scroll.insertBefore(root, list || scroll.firstChild)
     }
-    if (usageRoot.parentElement !== root) root.appendChild(usageRoot)
     if (!scroll.hasAttribute("data-claude-tree-mounted")) {
       scroll.setAttribute("data-claude-tree-mounted", "")
     }
@@ -1178,6 +1343,7 @@ function setupProjectTree(ctx) {
   let usageTimer
 
   const start = () => {
+    document.body.appendChild(panel)
     mount()
     renderUsage()
     refresh()
@@ -1230,19 +1396,27 @@ function localeStrings(ctx) {
       collapseAll: "Свернуть все проекты",
       expandAll: "Развернуть все проекты",
       running: "Агент работает",
+      unread: "Новый ответ",
+      sortActivity: "Сортировка: по активности",
+      sortName: "Сортировка: по названию",
+      rollingShort: "5ч",
+      weeklyShort: "нед",
+      monthlyShort: "мес",
       limits: "Лимиты",
       go: "OpenCode Go",
       rolling: "5 часов",
       weekly: "Неделя",
       monthly: "Месяц",
       left: "осталось {percent}%",
-      used: "Использовано {percent}%",
       resetShort: "сброс",
-      resetLong: "Сброс {time}",
       limited: "лимит исчерпан",
-      refreshUsage: "Обновить лимиты",
       usageError: "Не удалось загрузить лимиты",
+      usageShort: "лимиты: ошибка",
+      refreshUsage: "Обновить лимиты",
       retry: "Повторить",
+      windowHeader: "Окно",
+      leftHeader: "Осталось",
+      resetHeader: "Сброс",
       minutes: "мин",
       hours: "ч",
       days: "дн",
@@ -1259,19 +1433,27 @@ function localeStrings(ctx) {
     collapseAll: "Collapse all projects",
     expandAll: "Expand all projects",
     running: "Agent is running",
+    unread: "New reply",
+    sortActivity: "Sort: by activity",
+    sortName: "Sort: by name",
+    rollingShort: "5h",
+    weeklyShort: "wk",
+    monthlyShort: "mo",
     limits: "Limits",
     go: "OpenCode Go",
     rolling: "5 hours",
     weekly: "Week",
     monthly: "Month",
     left: "{percent}% left",
-    used: "{percent}% used",
     resetShort: "resets",
-    resetLong: "Resets {time}",
     limited: "limit reached",
-    refreshUsage: "Refresh limits",
     usageError: "Could not load limits",
+    usageShort: "limits: error",
+    refreshUsage: "Refresh limits",
     retry: "Retry",
+    windowHeader: "Window",
+    leftHeader: "Left",
+    resetHeader: "Resets",
     minutes: "min",
     hours: "h",
     days: "d",
