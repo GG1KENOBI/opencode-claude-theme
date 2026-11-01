@@ -94,6 +94,46 @@ const treeCss = String.raw`
   color: var(--v2-text-text-faint);
 }
 
+[data-claude-tree] .ct-head-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-claude-tree] .ct-head-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+[data-claude-tree] .ct-head-btn:hover {
+  background: var(--v2-background-bg-base);
+  color: var(--v2-text-text-base);
+}
+
+[data-claude-tree] .ct-head-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s ease;
+}
+
+[data-claude-tree] .ct-head-btn[data-open="1"] svg {
+  transform: rotate(180deg);
+}
+
 [data-claude-tree] .ct-project {
   display: flex;
   flex-direction: column;
@@ -846,10 +886,23 @@ function setupProjectTree(ctx) {
     store.sig = signature
 
     const fragment = document.createDocumentFragment()
+    const anyOpen = items.some((item) => store.collapsed[item.id] !== true)
+    const toggleAll = el("button", {
+      class: "ct-head-btn",
+      type: "button",
+      "data-toggle-all": "",
+      "data-open": anyOpen ? "1" : "0",
+      title: anyOpen ? strings.collapseAll : strings.expandAll,
+      "aria-label": anyOpen ? strings.collapseAll : strings.expandAll,
+    })
+    toggleAll.innerHTML = chevron
     fragment.appendChild(
       el("div", { class: "ct-head" }, [
         el("span", { text: strings.projects }),
-        el("span", { class: "ct-count", text: String(items.length) }),
+        el("span", { class: "ct-head-end" }, [
+          el("span", { class: "ct-count", text: String(items.length) }),
+          toggleAll,
+        ]),
       ]),
     )
 
@@ -955,9 +1008,34 @@ function setupProjectTree(ctx) {
     if (node) node.setAttribute("data-open", collapsed ? "0" : "1")
   }
 
+  function toggleAll() {
+    const nodes = root.querySelectorAll("[data-project]")
+    const anyOpen = Array.from(nodes).some((node) => node.getAttribute("data-open") === "1")
+    for (const node of nodes) {
+      const id = node.getAttribute("data-project")
+      if (anyOpen) store.collapsed[id] = true
+      else delete store.collapsed[id]
+      node.setAttribute("data-open", anyOpen ? "0" : "1")
+    }
+    saveCollapsed()
+    const button = root.querySelector("[data-toggle-all]")
+    if (button) {
+      button.setAttribute("data-open", anyOpen ? "0" : "1")
+      const label = anyOpen ? strings.expandAll : strings.collapseAll
+      button.setAttribute("title", label)
+      button.setAttribute("aria-label", label)
+    }
+  }
+
   root.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null
     if (!target) return
+
+    if (target.closest("[data-toggle-all]")) {
+      event.preventDefault()
+      toggleAll()
+      return
+    }
 
     const add = target.closest("[data-new]")
     if (add) {
@@ -1071,6 +1149,8 @@ function localeStrings(ctx) {
       untitled: "Без названия",
       loading: "Загрузка…",
       newSession: "Новая сессия в этом проекте",
+      collapseAll: "Свернуть все проекты",
+      expandAll: "Развернуть все проекты",
       limits: "Лимиты",
       go: "OpenCode Go",
       rolling: "5 часов",
@@ -1097,6 +1177,8 @@ function localeStrings(ctx) {
     untitled: "Untitled",
     loading: "Loading…",
     newSession: "New session in this project",
+    collapseAll: "Collapse all projects",
+    expandAll: "Expand all projects",
     limits: "Limits",
     go: "OpenCode Go",
     rolling: "5 hours",
