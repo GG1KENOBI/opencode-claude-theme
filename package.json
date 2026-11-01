@@ -1,0 +1,8 @@
+{
+  "name": "claude-theme",
+  "version": "0.1.0",
+  "description": "Claude Code inspired appearance for OpenCode Desktop",
+  "exports": {
+    "./gui-experimental": "./gui-experimental.cjs"
+  }
+}
