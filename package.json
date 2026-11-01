@@ -1,7 +1,19 @@
 {
   "name": "claude-theme",
   "version": "0.1.0",
-  "description": "Claude Code inspired appearance for OpenCode Desktop",
+  "description": "Claude Code look for OpenCode Desktop: warm palette, project/session tree, and OpenCode Go usage limits",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GG1KENOBI/opencode-claude-theme.git"
+  },
+  "homepage": "https://github.com/GG1KENOBI/opencode-claude-theme",
+  "keywords": [
+    "opencode",
+    "opencode-desktop",
+    "opencode-plugin",
+    "theme",
+    "claude-code"
+  ],
   "exports": {
     "./gui-experimental": "./gui-experimental.cjs"
   }
